@@ -2,13 +2,13 @@
 
 Invoke-Command -ComputerName Server001,Server002,Server003 -ScriptBlock { Get-WindowsFeature *hyper*, *failover* , *file-services* , *data-center-bridging* | Install-WindowsFeature -IncludeManagementTools -Restart } 
 
-# get physical disks of all machines  
+# Get physical disks of all machines  
 
 invoke-command -computername Server001,Server002,Server003 { get-physicaldisk } | Format-Table pscomputername,friendlyname,size,healthstatus,operationalstatus -AutoSize 
 
 # Configure Networking  
 
-# Ensure NICs are properly named prior to executing. Needs to be Admin and Admin1 
+# Ensure NICs are properly named prior to executing. 
 
 New-NetQosPolicy "SMB" -NetDirectPortMatchCondition 445 -PriorityValue8021Action 3 
 Enable-NetQosFlowControl -Priority 3 
@@ -21,6 +21,8 @@ Add-VMNetworkAdapter -SwitchName SETswitch -Name SMB_2 -managementOS
 Set-VMNetworkAdapterVlan -VMNetworkAdapterName "SMB_1" -VlanId 13 -Access -ManagementOS 
 Set-VMNetworkAdapterVlan -VMNetworkAdapterName "SMB_2" -VlanId 13 -Access -ManagementOS 
 Get-NetAdapter *SMB* | Restart-NetAdapter 
+
+# If using RDMA capable NICs, uncomment the next linee to enable RDMA on the adapters.
 
 # Get-NetAdapter *SMB* | Enable-NetAdapterRDMA  
 
@@ -51,27 +53,12 @@ Get-Disk | Where-Object Number -ne $null | Where-Object IsBoot -ne $true | Where
 Get-Disk | Where-Object Number -ne $null | Where-Object IsBoot -ne $true | Where-Object IsSystem -ne $true |Where-Object PartitionStyle -eq RAW | Group-Object -NoElement -Property FriendlyName } | Sort-Object -Property PsComputerName,Count 
 Enable-ClusterStorageSpacesDirect -CimSession MyClusterName 
 
-# Create Volume 
+# Create Cluster Shared Volume 
 
 New-Volume -FriendlyName "Volume1" -FileSystem CSVFS_ReFS -StoragePoolFriendlyName S2D* -Size 150TB 
 
 # Configure paths for Hyper-V  
 
-# Create default VM and VHD paths. This needs to be run on the node that is currently holding the pool 
+# Use Configure-PathsPoolHolder.ps1 on the node currently holding the pool, and Configure-PathsNonPoolHolder.ps1 on the other nodes.
 
-Get-VMHost | Format-List * 
-$VMDRIVE = "C:" 
-$VMPath = Join-Path -Path $VMDRIVE -ChildPath "ClusterStorage\Volume1\Hyper-V" 
-$VHDPath = Join-Path -Path $VMDRIVE -ChildPath "ClusterStorage\Volume1\Hyper-V\VirtualHardDisks" 
-mkdir -Path $VMPath,$VHDPath 
-Set-VMHost -VirtualHardDiskPath $VHDPath -VirtualMachinePath $VMPath  
-Get-VMHost | Format-List * 
-
-# Point the nodes at the default VM and VHD paths. This needs to be run on all other nodes 
-
-Get-VMHost | Format-List * 
-$VMDRIVE = "C:" 
-$VMPath = Join-Path -Path $VMDRIVE -ChildPath "ClusterStorage\Volume1\Hyper-V" 
-$VHDPath = Join-Path -Path $VMDRIVE -ChildPath "ClusterStorage\Volume1\Hyper-V\VirtualHardDisks" 
-Set-VMHost -VirtualHardDiskPath $VHDPath -VirtualMachinePath $VMPath  
-Get-VMHost | Format-List * 
+# To-do: Add code to automatically detect which node is currently holding the pool and configure paths accordingly.
